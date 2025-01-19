@@ -5,6 +5,8 @@ use thiserror::Error;
 pub enum ConsumerError {
     #[error("cannot connect to Redis: {0}")]
     ConnectionError(String),
+    #[error("you must connect to Redis before streaming")]
+    NotConnected,
 }
 
 impl From<RedisError> for ConsumerError {

@@ -21,6 +21,7 @@ impl ConsumerBuilder {
             redis: redis::Client::open(redis_url)?,
             active_queue_key: String::from(if skip_backlog_queue { ">" } else { "0-0" }),
             unclaimed_queue_key: String::from("0-0"),
+            redis_connection: None,
         })
     }
     pub fn skip_backlog_queue(mut self, value: bool) -> ConsumerBuilder {

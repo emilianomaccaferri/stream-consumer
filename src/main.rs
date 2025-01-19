@@ -2,6 +2,8 @@ use std::process::exit;
 
 use consumer::{builder::ConsumerBuilder, ConsumerMessage, StreamMessage};
 use futures::{pin_mut, StreamExt};
+use redis_macros::FromRedisValue;
+use serde::{Deserialize, Serialize};
 mod consumer;
 
 #[tokio::main]
@@ -22,10 +24,13 @@ async fn main() {
                     ConsumerMessage::EmptyStream => println!("empty"),
                     ConsumerMessage::Message(StreamMessage {
                         stream_name,
-                        messages,
-                    }) => println!("{}: {} messages", stream_name, messages),
+                        len,
+                        items,
+                    }) => for item in items {},
                 },
-                Err(e) => println!("{}", e),
+                Err(e) => {
+                    dbg!(&e);
+                }
             }
         }
         exit(0);
