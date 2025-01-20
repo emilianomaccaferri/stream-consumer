@@ -1,4 +1,5 @@
 use async_stream::stream;
+use autoclaim_reply::AutoclaimReply;
 use config::ConsumerConfiguration;
 use error::ConsumerError;
 use futures::Stream;
@@ -7,6 +8,7 @@ use redis::{
     AsyncCommands, RedisConnectionInfo,
 };
 
+mod autoclaim_reply;
 pub(crate) mod builder;
 mod config;
 pub(crate) mod error;
@@ -56,7 +58,11 @@ impl Consumer {
                     ).await?;
 
                 if reply.keys.is_empty() {
-                    // autoclaim here
+                    // autoclaim here, this happens when there are no
+                    // events after "block_time" ms passed
+                    if self.config.skip_autoclaim {
+                        self.autoclaim().await?;
+                    }
                     yield Ok(ConsumerMessage::EmptyStream)
                 }
                 for StreamKey {
@@ -83,5 +89,29 @@ impl Consumer {
 
             }
         })
+    }
+    /// This method allows the cosnumer to claim messages that are left pending by other
+    /// consumers.
+    async fn autoclaim(&mut self) -> Result<(), ConsumerError> {
+        let conn = self.redis_connection.as_mut().unwrap();
+        let response: AutoclaimReply = redis::cmd("xautoclaim")
+            .arg(&self.config.stream_name)
+            .arg(&self.config.notification_group)
+            .arg(&self.config.name)
+            .arg(self.config.autoclaim_time) // unclaimed key age
+            .arg(&self.unclaimed_queue_key)
+            .arg("count")
+            .arg(self.config.item_count)
+            .query_async(conn)
+            .await?;
+
+        if response.claimed_items != 0 {
+            // this way, once the "main" stream gets polled again,
+            // autoclaimed messages will automatically be delivered to the stream consumer
+            self.active_queue_key = "0-0".to_string();
+        }
+        self.unclaimed_queue_key = response.next; // if there are more keys we move to the next claimable "set"
+
+        Ok(())
     }
 }

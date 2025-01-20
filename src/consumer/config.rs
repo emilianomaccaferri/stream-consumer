@@ -19,6 +19,11 @@ pub(super) struct ConsumerConfiguration {
     /// i.e. if messages have arrived when the consumer was offline, those messages
     /// won't be processed (default: false)
     pub skip_backlog_queue: bool,
+    /// If true, when the consumer timeouts after "block_time" milliseconds,
+    /// no autoclaim will happen, meaning that the consumer won't
+    /// claim messages that are left inside the stream and are not processed by other
+    /// consumers (default: false) (https://redis.io/docs/latest/commands/xautoclaim/)
+    pub skip_autoclaim: bool,
 }
 
 impl Default for ConsumerConfiguration {
@@ -32,6 +37,7 @@ impl Default for ConsumerConfiguration {
             block_time: 0,
             autoclaim_time: 60_000,
             skip_backlog_queue: false,
+            skip_autoclaim: false,
         }
     }
 }

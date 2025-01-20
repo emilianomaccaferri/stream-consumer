@@ -24,6 +24,10 @@ impl ConsumerBuilder {
             redis_connection: None,
         })
     }
+    pub fn skip_autoclaim(mut self, value: bool) -> ConsumerBuilder {
+        self.config.skip_autoclaim = value;
+        self
+    }
     pub fn skip_backlog_queue(mut self, value: bool) -> ConsumerBuilder {
         self.config.skip_backlog_queue = value;
         self

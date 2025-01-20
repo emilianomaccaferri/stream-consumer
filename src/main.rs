@@ -2,8 +2,6 @@ use std::process::exit;
 
 use consumer::{builder::ConsumerBuilder, ConsumerMessage, StreamMessage};
 use futures::{pin_mut, StreamExt};
-use redis_macros::FromRedisValue;
-use serde::{Deserialize, Serialize};
 mod consumer;
 
 #[tokio::main]
@@ -16,6 +14,9 @@ async fn main() {
         .skip_backlog_queue(false)
         .build()
     {
+        if let Err(conn_err) = consumer.connect().await {
+            panic!("cannot connect: {}", conn_err);
+        }
         let stream = consumer.stream().await.unwrap();
         pin_mut!(stream);
         while let Some(n) = stream.next().await {
