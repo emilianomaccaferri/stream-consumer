@@ -1,2 +1,3 @@
-# rs-redis-consumer
-A Redis consumer implementation with Rust streams
+# stream-consumer
+
+A Valkey/Redis consumer implementation with Rust streams

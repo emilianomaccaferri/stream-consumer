@@ -7,6 +7,10 @@ pub enum ConsumerError {
     ConnectionError(String),
     #[error("you must connect to Redis before streaming")]
     NotConnected,
+    /// this should not happen, meaning that redis shouldn't return messages
+    /// from non-registered streams
+    #[error("retrieved message from invalid stream: {0}")]
+    InvalidStreamName(String),
 }
 
 impl From<RedisError> for ConsumerError {

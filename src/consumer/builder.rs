@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use redis::RedisError;
 use thiserror::Error;
 
@@ -16,11 +18,20 @@ impl ConsumerBuilder {
     pub fn build(self) -> Result<Consumer, ConsumerError> {
         let redis_url = self.config.redis_url.clone();
         let skip_backlog_queue = self.config.skip_backlog_queue;
+        let mut active_queue_hash_map = HashMap::<String, String>::new();
+        let mut unclaimed_queue_hash_map = HashMap::<String, String>::new();
+        for stream_name in &self.config.streams {
+            active_queue_hash_map.insert(
+                String::from(stream_name),
+                String::from(if skip_backlog_queue { ">" } else { "0-0" }),
+            );
+            unclaimed_queue_hash_map.insert(String::from(stream_name), String::from("0-0"));
+        }
         Ok(Consumer {
             config: self.config,
             redis: redis::Client::open(redis_url)?,
-            active_queue_key: String::from(if skip_backlog_queue { ">" } else { "0-0" }),
-            unclaimed_queue_key: String::from("0-0"),
+            active_queue_keys: active_queue_hash_map.clone(),
+            unclaimed_queue_keys: unclaimed_queue_hash_map.clone(),
             redis_connection: None,
         })
     }
@@ -40,8 +51,8 @@ impl ConsumerBuilder {
         self.config.redis_url = redis_url.to_string();
         self
     }
-    pub fn stream_name(mut self, stream_name: &str) -> ConsumerBuilder {
-        self.config.stream_name = stream_name.to_string();
+    pub fn add_stream(mut self, stream_name: &str) -> ConsumerBuilder {
+        self.config.streams.push(stream_name.to_owned());
         self
     }
     pub fn notification_group(mut self, notification_group: &str) -> ConsumerBuilder {

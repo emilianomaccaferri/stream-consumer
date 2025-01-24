@@ -16,7 +16,6 @@ impl FromRedisValue for AutoclaimReply {
         let next: String = from_redis_value(&arr[0])?; // this should represent the id
         let dead_items: Vec<Value> = from_redis_value(&arr[1])?; // these are the items in the dead-letter queue
                                                                  // we don't care about their type, since we are claiming them
-
         Ok(AutoclaimReply {
             next,
             claimed_items: dead_items.len(),

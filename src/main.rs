@@ -7,7 +7,7 @@ mod consumer;
 #[tokio::main]
 async fn main() {
     if let Ok(mut consumer) = ConsumerBuilder::new()
-        .stream_name("streams:images_data")
+        .add_stream("streams:images_data")
         .notification_group("builders")
         .block_time(1000)
         .item_count(10)

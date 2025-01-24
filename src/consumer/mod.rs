@@ -1,23 +1,26 @@
+use std::collections::HashMap;
+
 use async_stream::stream;
-use autoclaim_reply::AutoclaimReply;
 use config::ConsumerConfiguration;
 use error::ConsumerError;
 use futures::Stream;
 use redis::{
     streams::{StreamId, StreamKey, StreamReadOptions, StreamReadReply},
-    AsyncCommands, RedisConnectionInfo,
+    AsyncCommands,
 };
+use utils::autoclaim;
 
 mod autoclaim_reply;
 pub(crate) mod builder;
 mod config;
 pub(crate) mod error;
+mod utils;
 
 pub struct Consumer {
     config: ConsumerConfiguration,
     redis: redis::Client,
-    active_queue_key: String,
-    unclaimed_queue_key: String,
+    active_queue_keys: HashMap<String, String>,
+    unclaimed_queue_keys: HashMap<String, String>,
     redis_connection: Option<redis::aio::MultiplexedConnection>,
 }
 pub struct StreamMessage {
@@ -50,18 +53,43 @@ impl Consumer {
         Ok(stream! {
             loop {
                 let conn = self.redis_connection.as_mut().unwrap();
+                let active_queue_keys = self.active_queue_keys
+                    .keys()
+                    // .cloned()
+                    .collect::<Vec<&String>>();
                 let reply: StreamReadReply = conn
                     .xread_options(
-                        &[&self.config.stream_name],
-                        &[&self.active_queue_key],
+                        &self.config.streams,
+                        &active_queue_keys,
                         &x_readgroup_options
                     ).await?;
 
                 if reply.keys.is_empty() {
                     // autoclaim here, this happens when there are no
                     // events after "block_time" ms passed
-                    if self.config.skip_autoclaim {
-                        self.autoclaim().await?;
+                    if !self.config.skip_autoclaim {
+                        for stream_name in &self.config.streams {
+                            let response = autoclaim(
+                                self.redis_connection.as_mut().unwrap(),
+                                stream_name,
+                                &self.config.notification_group,
+                                &self.config.name,
+                                self.config.autoclaim_time,
+                                self.unclaimed_queue_keys.get(stream_name).unwrap(),
+                                self.config.item_count
+                            ).await?;
+                            if response.claimed_items != 0 {
+                                if let Some(entry) = self.active_queue_keys.get_mut(stream_name){
+                                    *entry = "0-0".to_string();
+                                    let unclaimed_entry_key = self.unclaimed_queue_keys.get_mut(stream_name).unwrap();
+                                    *unclaimed_entry_key = response.next; // if there are more keys we move to the next claimable "set"
+                                }else{
+                                    yield Err(
+                                        ConsumerError::InvalidStreamName(stream_name.to_string())
+                                    );
+                                };
+                            }
+                        }
                     }
                     yield Ok(ConsumerMessage::EmptyStream)
                 }
@@ -72,46 +100,24 @@ impl Consumer {
 
                     // for each stream the consumer is montoring (one for now)
                     // we emit messages
+                    if let Some(current_key_value) = self.active_queue_keys.get_mut(&key) {
+                        if ids.is_empty() && current_key_value != ">" {
+                            // backlog queue is drained
+                            *current_key_value = "0-0".to_string();
+                        }
 
-                    if ids.is_empty() && self.active_queue_key != ">" {
-                        // backlog queue is drained
-                        self.active_queue_key = ">".to_string();
+                        yield Ok(ConsumerMessage::Message(StreamMessage {
+                                stream_name: key,
+                                len: ids.len(),
+                                items: ids
+                            })
+                        )
+                    } else {
+                        yield Err(ConsumerError::InvalidStreamName(key.clone()));
                     }
-
-                    yield Ok(ConsumerMessage::Message(StreamMessage {
-                            stream_name: key,
-                            len: ids.len(),
-                            items: ids
-                        })
-                    )
-
                 }
 
             }
         })
-    }
-    /// This method allows the cosnumer to claim messages that are left pending by other
-    /// consumers.
-    async fn autoclaim(&mut self) -> Result<(), ConsumerError> {
-        let conn = self.redis_connection.as_mut().unwrap();
-        let response: AutoclaimReply = redis::cmd("xautoclaim")
-            .arg(&self.config.stream_name)
-            .arg(&self.config.notification_group)
-            .arg(&self.config.name)
-            .arg(self.config.autoclaim_time) // unclaimed key age
-            .arg(&self.unclaimed_queue_key)
-            .arg("count")
-            .arg(self.config.item_count)
-            .query_async(conn)
-            .await?;
-
-        if response.claimed_items != 0 {
-            // this way, once the "main" stream gets polled again,
-            // autoclaimed messages will automatically be delivered to the stream consumer
-            self.active_queue_key = "0-0".to_string();
-        }
-        self.unclaimed_queue_key = response.next; // if there are more keys we move to the next claimable "set"
-
-        Ok(())
     }
 }

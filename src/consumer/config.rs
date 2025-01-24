@@ -3,8 +3,8 @@ pub(super) struct ConsumerConfiguration {
     pub name: String,
     /// Redis connection url
     pub redis_url: String,
-    /// Redis stream name
-    pub stream_name: String,
+    /// Redis streams to monitor
+    pub streams: Vec<String>,
     /// Redis notification group name
     pub notification_group: String,
     /// How many items should be retrieved each time (default: 1)
@@ -31,7 +31,7 @@ impl Default for ConsumerConfiguration {
         ConsumerConfiguration {
             name: fake_rs::generate_name().to_lowercase(),
             redis_url: String::from("redis://127.0.0.1:6379"),
-            stream_name: String::from("redis_stream"),
+            streams: vec![String::from("redis_stream")],
             notification_group: String::from("notification_group"),
             item_count: 1,
             block_time: 0,
