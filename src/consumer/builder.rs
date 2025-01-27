@@ -7,12 +7,14 @@ use super::{config::ConsumerConfiguration, error::ConsumerError, Consumer};
 
 pub(crate) struct ConsumerBuilder {
     config: ConsumerConfiguration,
+    non_default_streams: bool,
 }
 
 impl ConsumerBuilder {
     pub fn new() -> ConsumerBuilder {
         ConsumerBuilder {
             config: ConsumerConfiguration::default(),
+            non_default_streams: false,
         }
     }
     pub fn build(self) -> Result<Consumer, ConsumerError> {
@@ -52,6 +54,10 @@ impl ConsumerBuilder {
         self
     }
     pub fn add_stream(mut self, stream_name: &str) -> ConsumerBuilder {
+        if !self.non_default_streams {
+            self.config.streams.clear();
+            self.non_default_streams = true;
+        }
         self.config.streams.push(stream_name.to_owned());
         self
     }

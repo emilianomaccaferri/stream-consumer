@@ -8,8 +8,9 @@ mod consumer;
 async fn main() {
     if let Ok(mut consumer) = ConsumerBuilder::new()
         .add_stream("streams:images_data")
+        .add_stream("streams:another_stream")
         .notification_group("builders")
-        .block_time(1000)
+        .block_time(5_000)
         .item_count(10)
         .skip_backlog_queue(false)
         .build()
@@ -17,17 +18,24 @@ async fn main() {
         if let Err(conn_err) = consumer.connect().await {
             panic!("cannot connect: {}", conn_err);
         }
+        println!("listening as: {}", &consumer.name());
         let stream = consumer.stream().await.unwrap();
         pin_mut!(stream);
         while let Some(n) = stream.next().await {
             match n {
                 Ok(stream_result) => match stream_result {
-                    ConsumerMessage::EmptyStream => println!("empty"),
+                    ConsumerMessage::EmptyStream(stream_name) => {
+                        println!("{} is empty", stream_name)
+                    }
                     ConsumerMessage::Message(StreamMessage {
                         stream_name,
                         len,
                         items,
-                    }) => for item in items {},
+                    }) => {
+                        for item in items {
+                            println!("message received from stream {}", stream_name);
+                        }
+                    }
                 },
                 Err(e) => {
                     dbg!(&e);
